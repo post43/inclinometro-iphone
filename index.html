@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b0d10">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Inclinometro iPhone</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg:#0b0d10; --panel:#14181d; --text:#f5f7fa; --muted:#98a2ad;
+      --line:#303944; --accent:#5bd17b; --warn:#f0c35a; --danger:#ff6b6b;
+    }
+    * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    html,body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Neue",Arial,sans-serif; }
+    body { min-height:100svh; display:flex; justify-content:center; }
+    .app { width:min(100%,760px); padding:calc(env(safe-area-inset-top) + 18px) 18px calc(env(safe-area-inset-bottom) + 20px); }
+    .top { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    h1 { font-size:20px; margin:0; letter-spacing:.02em; }
+    .status { font-size:12px; color:var(--muted); display:flex; align-items:center; gap:7px; }
+    .dot { width:8px;height:8px;border-radius:50%;background:#646f7c; }
+    .dot.live { background:var(--accent); box-shadow:0 0 0 5px rgba(91,209,123,.12); }
+    .stage { position:relative; margin-top:16px; height:390px; border:1px solid var(--line); border-radius:28px; overflow:hidden; background:linear-gradient(#151a20 0 49.9%, #101419 50%); }
+    .horizon { position:absolute; left:-20%; width:140%; top:50%; height:2px; background:rgba(245,247,250,.75); transform-origin:center; transition:transform .08s linear, top .08s linear; }
+    .ticks { position:absolute; inset:0; opacity:.45; background:
+      linear-gradient(90deg, transparent 49.75%, rgba(255,255,255,.24) 50%, transparent 50.25%);
+    }
+    .car { position:absolute; left:50%; top:50%; width:148px; height:72px; transform:translate(-50%,-50%); transition:transform .08s linear; }
+    .car-body { position:absolute; left:17px; right:17px; top:16px; bottom:12px; border:3px solid var(--text); border-radius:28px 28px 18px 18px; }
+    .car-roof { position:absolute; left:42px; right:42px; top:0; height:29px; border:3px solid var(--text); border-bottom:none; border-radius:19px 19px 0 0; }
+    .wheel { position:absolute; bottom:1px; width:21px; height:21px; border-radius:50%; background:var(--text); }
+    .wheel.l { left:22px; } .wheel.r { right:22px; }
+    .cross { position:absolute; left:50%; top:50%; width:14px;height:14px; border:2px solid var(--accent); border-radius:50%; transform:translate(-50%,-50%); }
+    .cross:before,.cross:after { content:""; position:absolute; background:var(--accent); }
+    .cross:before { width:2px;height:24px;left:4px;top:-7px; }
+    .cross:after { height:2px;width:24px;left:-7px;top:4px; }
+    .readouts { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px; }
+    .card { background:var(--panel); border:1px solid var(--line); border-radius:22px; padding:18px; }
+    .label { color:var(--muted); font-size:12px; font-weight:700; letter-spacing:.14em; }
+    .value { font-size:46px; font-weight:800; font-variant-numeric:tabular-nums; line-height:1.05; margin-top:6px; }
+    .dir { margin-top:5px; color:var(--muted); font-size:13px; min-height:18px; }
+    .controls { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px; }
+    button { min-height:52px; border-radius:16px; border:1px solid var(--line); font:inherit; font-weight:750; font-size:16px; cursor:pointer; }
+    #start { background:var(--accent); color:#08110b; border-color:transparent; }
+    #zero { background:var(--panel); color:var(--text); }
+    #zero:disabled { opacity:.45; }
+    .msg { margin-top:13px; color:var(--muted); font-size:13px; line-height:1.45; text-align:center; min-height:40px; }
+    .demo { margin-top:16px; padding-top:14px; border-top:1px solid var(--line); }
+    .demo summary { cursor:pointer; color:var(--muted); font-size:13px; }
+    .slider { margin-top:12px; display:grid; grid-template-columns:70px 1fr 58px; gap:10px; align-items:center; font-size:13px; color:var(--muted); }
+    input[type=range] { width:100%; }
+    .cal { position:absolute; inset:0; background:rgba(8,10,13,.72); backdrop-filter:blur(8px); display:none; align-items:center; justify-content:center; text-align:center; padding:24px; z-index:3; }
+    .cal.on { display:flex; }
+    .cal strong { display:block; font-size:24px; margin-bottom:8px; }
+    @media (max-width:520px) {
+      .stage { height:320px; }
+      .value { font-size:38px; }
+    }
+    @media (orientation:landscape) and (max-height:520px) {
+      body{display:block}.app{width:100%;max-width:none;padding-top:10px}
+      .top{display:none}.layout{display:grid;grid-template-columns:1.4fr 1fr;gap:12px}
+      .stage{margin-top:0;height:calc(100svh - 30px)}
+      .side{display:flex;flex-direction:column;justify-content:center}
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <div class="top">
+      <h1>Inclinometro</h1>
+      <div class="status"><span id="dot" class="dot"></span><span id="status">non avviato</span></div>
+    </div>
+
+    <div class="layout">
+      <section class="stage" aria-label="Indicatore grafico di inclinazione">
+        <div class="ticks"></div>
+        <div id="horizon" class="horizon"></div>
+        <div id="car" class="car" aria-hidden="true">
+          <div class="car-roof"></div><div class="car-body"></div>
+          <div class="wheel l"></div><div class="wheel r"></div>
+        </div>
+        <div class="cross"></div>
+        <div id="cal" class="cal">
+          <div><strong>Calibrazione…</strong>Tieni fermo l'iPhone per un secondo.</div>
+        </div>
+      </section>
+
+      <div class="side">
+        <section class="readouts">
+          <div class="card">
+            <div class="label">PITCH</div>
+            <div id="pitch" class="value">0.0°</div>
+            <div id="pitchDir" class="dir">—</div>
+          </div>
+          <div class="card">
+            <div class="label">ROLL</div>
+            <div id="roll" class="value">0.0°</div>
+            <div id="rollDir" class="dir">—</div>
+          </div>
+        </section>
+
+        <section class="controls">
+          <button id="start" type="button">Avvia inclinometro</button>
+          <button id="zero" type="button" disabled>Azzera</button>
+        </section>
+
+        <div id="msg" class="msg">
+          Su iPhone tocca “Avvia inclinometro” e consenti l'accesso a Movimento e orientamento.
+        </div>
+
+        <details class="demo">
+          <summary>Modalità demo / test senza sensori</summary>
+          <div class="slider"><span>Pitch</span><input id="demoPitch" type="range" min="-35" max="35" step="0.1" value="0"><b id="dp">0.0°</b></div>
+          <div class="slider"><span>Roll</span><input id="demoRoll" type="range" min="-35" max="35" step="0.1" value="0"><b id="dr">0.0°</b></div>
+        </details>
+      </div>
+    </div>
+  </main>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const pitchEl=$('pitch'), rollEl=$('roll'), pitchDir=$('pitchDir'), rollDir=$('rollDir'),
+        car=$('car'), horizon=$('horizon'), startBtn=$('start'), zeroBtn=$('zero'),
+        msg=$('msg'), statusEl=$('status'), dot=$('dot'), cal=$('cal');
+
+  let active=false, calibrating=false, samples=[];
+  let zero={p:0,r:0}, smoothed={p:0,r:0};
+  const alpha=0.16;
+  let receivedOrientation=false;
+
+  function screenAngle(){
+    if (screen.orientation && typeof screen.orientation.angle === 'number') return ((screen.orientation.angle%360)+360)%360;
+    if (typeof window.orientation === 'number') return ((window.orientation%360)+360)%360;
+    return 0;
+  }
+
+  function toScreenRelative(beta,gamma){
+    const a=screenAngle();
+    if(a===90) return {p:-gamma, r:beta};
+    if(a===270) return {p:gamma, r:-beta};
+    if(a===180) return {p:-beta, r:-gamma};
+    return {p:beta, r:gamma};
+  }
+
+  function clamp(v,min,max){ return Math.max(min,Math.min(max,v)); }
+  function delta(a,b){
+    let d=a-b;
+    while(d>180)d-=360;
+    while(d<-180)d+=360;
+    return d;
+  }
+
+  function render(p,r){
+    p=clamp(p,-89,89); r=clamp(r,-89,89);
+    pitchEl.textContent=(p>=0?'+':'')+p.toFixed(1)+'°';
+    rollEl.textContent=(r>=0?'+':'')+r.toFixed(1)+'°';
+    pitchDir.textContent=Math.abs(p)<0.4?'in piano':(p>0?'salita':'discesa');
+    rollDir.textContent=Math.abs(r)<0.4?'in piano':(r>0?'destra':'sinistra');
+    car.style.transform=`translate(-50%,-50%) rotate(${r}deg)`;
+    horizon.style.transform=`rotate(${r}deg)`;
+    horizon.style.top=(50 + clamp(p,-30,30)*0.75)+'%';
+  }
+
+  function setMessage(text, error=false){
+    msg.textContent=text;
+    msg.style.color = error ? '#ff9b9b' : '';
+  }
+
+  function beginCalibration(){
+    calibrating=true;
+    samples=[];
+    cal.classList.add('on');
+    setMessage('Calibrazione automatica: tieni fermo l’iPhone.');
+  }
+
+  function finishCalibration(){
+    if(samples.length<10) return;
+    zero.p=samples.reduce((s,v)=>s+v.p,0)/samples.length;
+    zero.r=samples.reduce((s,v)=>s+v.r,0)/samples.length;
+    smoothed={p:0,r:0};
+    calibrating=false;
+    samples=[];
+    cal.classList.remove('on');
+    render(0,0);
+    setMessage('Zero impostato. Inclinometro attivo.');
+  }
+
+  function onOrientation(e){
+    if(typeof e.beta!=='number' || typeof e.gamma!=='number') return;
+    receivedOrientation=true;
+    const raw=toScreenRelative(e.beta,e.gamma);
+
+    if(calibrating){
+      samples.push(raw);
+      if(samples.length>=25) finishCalibration();
+      return;
+    }
+    if(!active) return;
+
+    const p=delta(raw.p,zero.p);
+    const r=delta(raw.r,zero.r);
+    smoothed.p += alpha*(p-smoothed.p);
+    smoothed.r += alpha*(r-smoothed.r);
+    render(smoothed.p,smoothed.r);
+  }
+
+  async function requestSensors(){
+    startBtn.disabled=true;
+    setMessage('Richiesta accesso ai sensori…');
+
+    try{
+      if(!window.isSecureContext){
+        throw new Error('Questa pagina non è in HTTPS. Aprila direttamente in Safari da un indirizzo HTTPS.');
+      }
+
+      const hasOrientation = typeof DeviceOrientationEvent !== 'undefined';
+      const hasMotion = typeof DeviceMotionEvent !== 'undefined';
+
+      if(!hasOrientation && !hasMotion){
+        throw new Error('Questo visualizzatore non espone i sensori. Apri il link direttamente in Safari su iPhone.');
+      }
+
+      const permissionRequests = [];
+
+      if(hasOrientation && typeof DeviceOrientationEvent.requestPermission === 'function'){
+        permissionRequests.push(DeviceOrientationEvent.requestPermission());
+      }
+      if(hasMotion && typeof DeviceMotionEvent.requestPermission === 'function'){
+        permissionRequests.push(DeviceMotionEvent.requestPermission());
+      }
+
+      if(permissionRequests.length){
+        const results = await Promise.all(permissionRequests);
+        if(results.some(v => v !== 'granted')){
+          throw new Error('Permesso Movimento e orientamento non concesso.');
+        }
+      }
+
+      window.addEventListener('deviceorientation', onOrientation, {passive:true});
+      active=true;
+      receivedOrientation=false;
+
+      statusEl.textContent='sensori attivi';
+      dot.classList.add('live');
+      startBtn.textContent='Sensori attivi';
+      zeroBtn.disabled=false;
+      beginCalibration();
+
+      setTimeout(() => {
+        if(!receivedOrientation){
+          active=false;
+          calibrating=false;
+          cal.classList.remove('on');
+          startBtn.disabled=false;
+          startBtn.textContent='Riprova';
+          zeroBtn.disabled=true;
+          statusEl.textContent='nessun dato sensore';
+          dot.classList.remove('live');
+          setMessage('Nessun dato dai sensori. Apri questa pagina direttamente in Safari, non nell’anteprima di ChatGPT.', true);
+        }
+      }, 2500);
+
+    } catch(err){
+      active=false;
+      calibrating=false;
+      cal.classList.remove('on');
+      startBtn.disabled=false;
+      startBtn.textContent='Riprova';
+      zeroBtn.disabled=true;
+      statusEl.textContent='non disponibile';
+      dot.classList.remove('live');
+      setMessage(err && err.message ? err.message : String(err), true);
+    }
+  }
+
+  startBtn.addEventListener('click', requestSensors);
+  zeroBtn.addEventListener('click', () => {
+    if(active) beginCalibration();
+  });
+
+  const secure = window.isSecureContext ? 'HTTPS OK' : 'NO HTTPS';
+  const orientation = typeof DeviceOrientationEvent !== 'undefined' ? 'Orientation OK' : 'No Orientation';
+  const motion = typeof DeviceMotionEvent !== 'undefined' ? 'Motion OK' : 'No Motion';
+  msg.textContent = `Apri in Safari su iPhone e tocca “Avvia inclinometro”. ${secure} • ${orientation} • ${motion}`;
+
+  render(0,0);
+})();
+</script>
+</body>
+</html>
